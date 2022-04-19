@@ -22,7 +22,8 @@
          "HttpRequestHandler",
          "OccupancySensor",
          "BinarySensor",
-         "Settings"
+         "Settings",
+         "Refresh"
       ]
    },
    "dependencies": {
@@ -31,5 +32,8 @@
    },
    "devDependencies": {
       "@scrypted/sdk": "^0.0.145"
+   },
+   "optionalDependencies": {
+      "jsxapi": "^5.1.1"
    }
 }
