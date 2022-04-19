@@ -145,11 +145,7 @@ class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySen
         const peoplePresence = json.Status?.RoomAnalytics?.PeoplePresence?.Value
         if (peoplePresence) {
             this.console.log(`People Presence ${peoplePresence}`)
-
-            if (peoplePresence === "Yes")
-                this.occupied = true;
-            else
-                this.occupied = false;
+            this.occupied = (peoplePresence === "Yes")
         }
         
         const currentPeopleCount = Number(json.Status?.RoomAnalytics?.PeopleCount?.Current?.Value)
