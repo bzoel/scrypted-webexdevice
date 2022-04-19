@@ -1,0 +1,35 @@
+{
+   "name": "@scrypted/webexdevice",
+   "version": "0.0.1",
+   "description": "Webex Device plugin for Scrypted",
+   "Author": "Billy Zoellers",
+   "License": "Apache",
+   "scripts": {
+      "prepublishOnly": "NODE_ENV=production scrypted-webpack",
+      "prescrypted-vscode-launch": "scrypted-webpack",
+      "scrypted-vscode-launch": "scrypted-deploy-debug",
+      "scrypted-deploy-debug": "scrypted-deploy-debug",
+      "scrypted-debug": "scrypted-debug",
+      "scrypted-deploy": "scrypted-deploy",
+      "scrypted-webpack": "scrypted-webpack"
+   },
+   "scrypted": {
+      "name": "Webex Device",
+      "type": "Sensor",
+      "interfaces": [
+         "Thermometer",
+         "HumiditySensor",
+         "HttpRequestHandler",
+         "OccupancySensor",
+         "BinarySensor",
+         "Settings"
+      ]
+   },
+   "dependencies": {
+      "@types/node": "^16.6.1",
+      "axios": "^0.24.0"
+   },
+   "devDependencies": {
+      "@scrypted/sdk": "^0.0.145"
+   }
+}
