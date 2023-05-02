@@ -4,25 +4,20 @@
  */
 import { HttpRequestHandler, HumiditySensor, ScryptedDeviceBase, TemperatureUnit, Thermometer, HttpRequest, HttpResponse, BinarySensor, OccupancySensor, Settings, Setting, SettingValue, Refresh, DeviceInformation } from '@scrypted/sdk';
 import sdk from '@scrypted/sdk';
-const { log, endpointManager } = sdk;
+const { endpointManager } = sdk;
 const jsxapi = require('jsxapi');
 
 const FEEDBACK_SLOT = 2;
 
 class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySensor, HttpRequestHandler, BinarySensor, OccupancySensor, Settings, Refresh {    
     xapi: typeof jsxapi
-    httpEndpoint: string
     
     constructor() {
         super();
         this.temperatureUnit = TemperatureUnit.C;
         this.xapi = undefined;
 
-        endpointManager.getInsecurePublicLocalEndpoint().then(endpoint => {
-            this.httpEndpoint = endpoint.replace("127.0.0.1", this.storage.getItem('scrypted_server_ip'));
-            this.connectXAPI();
-        })
-
+        this.connectXAPI();
     }
 
     connectXAPI() {
@@ -36,30 +31,33 @@ class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySen
             this.xapi = xapi;
             this.console.log(`Connected to xapi of ${this.storage.getItem('device_ip')}`)
 
+            const httpEndpoint = await endpointManager?.getInsecurePublicLocalEndpoint()
+            this.console.log(`Requesting HttpFeedback to '${httpEndpoint}'`)
+
             // Register HttpFeedback
-            this.xapi.Command.HttpFeedback.Register({
+            const httpFeedback = await this.xapi.Command.HttpFeedback.Register({
                 Expression: [
-                    "/Event/CallSuccessful",
                     "/Event/CallDisconnect",
+                    "/Event/CallSuccessful",
+                    "/Status/Audio/Microphones/Mute",
                     "/Status/RoomAnalytics/PeoplePresence",
                     "/Status/RoomAnalytics/PeopleCount",
+                    "/Status/SystemUnit/State/NumberOfActiveCalls",
+                    "/Status/SystemUnit/State/CameraLid",
                 ],
                 FeedbackSlot: FEEDBACK_SLOT,
                 Format: "json",
-                ServerUrl: this.httpEndpoint
+                ServerUrl: httpEndpoint,
             });
+            this.console.log(`Registered HttpFeedback (slot ${httpFeedback['FeedbackSlot']}) with status ${httpFeedback['status']}`)
 
-            this.xapi.Status.SystemUnit
-                .get()
-                .then((SystemUnit) => {
-                    this.info = {
-                        manufacturer: SystemUnit.ProductType,
-                        model: SystemUnit.ProductId,
-                        serialNumber: SystemUnit.Hardware.Module.SerialNumber,
-                        firmware: (SystemUnit.Software.Version).replace("ce", ""),
-                    }
-                })
-
+            const systemUnit = await this.xapi.Status.SystemUnit.get()
+            this.info = {
+                manufacturer: systemUnit.ProductType,
+                model: systemUnit.ProductId,
+                serialNumber: systemUnit.Hardware.Module.SerialNumber,
+                firmware: (systemUnit.Software.Version).replace("ce", ""),
+            }
         });
     }
 
@@ -77,15 +75,12 @@ class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySen
     async refresh(refreshInterface: string, userInitiated: boolean): Promise<void> {
         this.console.log(`${refreshInterface} requested refresh: ${new Date()}`);
 
-        this.xapi.Status.RoomAnalytics
-            .get()
-            .then((RoomAnalytics) => {
-                this.console.log(`Temperature ${RoomAnalytics.AmbientTemperature}, Humidity ${RoomAnalytics.RelativeHumidity}, PeoplePresence ${RoomAnalytics.PeoplePresence}, PeopleCount ${RoomAnalytics.PeopleCount}`);
-                
-                this.temperature = RoomAnalytics.AmbientTemperature;
-                this.humidity = RoomAnalytics.RelativeHumidity;
-                this.occupied = (RoomAnalytics.PeoplePresence === "Yes");
-            })
+        const roomAnalytics = await this.xapi.Status.RoomAnalytics.get()
+        this.console.log(roomAnalytics)  
+
+        this.temperature = roomAnalytics.AmbientTemperature;
+        this.humidity = roomAnalytics.RelativeHumidity;
+        this.occupied = (roomAnalytics.PeoplePresence === "Yes");
 
     }
 
@@ -109,12 +104,6 @@ class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySen
                 value: this.storage.getItem("device_password"),
                 description: "Password on Webex device"
             },
-            {
-                title: "Scrypted Server IP",
-                key: "scrypted_server_ip",
-                value: this.storage.getItem("scrypted_server_ip"),
-                description: "IP of the Scrypted server"
-            }
         ]
     }
 
@@ -126,20 +115,32 @@ class WebexDevice extends ScryptedDeviceBase implements Thermometer, HumiditySen
         response.send('OK');
         
         const json = JSON.parse(request.body)
-        this.console.log(json)
+        //this.console.log(json)
+
+        const mute = json.Status?.Audio?.Microphones?.Mute?.Value
+        if (mute) {
+            this.console.log(`Mute ${mute}`)
+        }
+
+        const cameraLid = json.Status?.SystemUnit?.State?.CameraLid?.Value
+        if (cameraLid) {
+            this.console.log(`Camera Lid ${cameraLid}`)
+        }
+
+        const activeCalls = json.Status?.SystemUnit?.State?.NumberOfActiveCalls?.Value
+        if (activeCalls) {
+            this.console.log(`Active calls ${activeCalls}`)
+            this.binaryState = (activeCalls !== "0")
+        }
 
         const callConnect = json.Event?.CallSuccessful
         if (callConnect) {
             this.console.log('Call connected')
-            this.console.log(callConnect)
-            this.binaryState = true;
         }
 
         const callDisconnect = json.Event?.CallDisconnect
         if (callDisconnect) {
             this.console.log('Call disconnected')
-            this.console.log(callDisconnect)
-            this.binaryState = false;
         }
 
         const peoplePresence = json.Status?.RoomAnalytics?.PeoplePresence?.Value
